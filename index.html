@@ -109,6 +109,61 @@
         .control-btn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 5px 15px;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+        .toggle-container:hover {
+            background: rgba(0, 0, 0, 0.9);
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+            margin-left: 8px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4CAF50;
+        }
+        input:focus + .toggle-slider {
+            box-shadow: 0 0 1px #4CAF50;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
         .dragover {
             background: rgba(200, 200, 255, 0.9);
             border-color: #66f;
@@ -190,6 +245,13 @@
             <div class="control-buttons">
                 <button class="control-btn" id="play-pause-btn">Play</button>
                 <button class="control-btn" id="reset-btn">Reset</button>
+                <div class="toggle-container" id="loop-toggle-container">
+                    Loop
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="loop-toggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
             <div class="keyboard-hint">Press Space to Play/Pause</div>
         </div>
@@ -204,11 +266,14 @@
         const resetBtn = document.getElementById('reset-btn');
         const fileName1 = document.getElementById('file-name-1');
         const fileName2 = document.getElementById('file-name-2');
+        const loopToggle = document.getElementById('loop-toggle');
+        const loopToggleContainer = document.getElementById('loop-toggle-container');
         
         let isDragging = false;
         let isPlaying = false;
         let media1, media2;
         let media1Type, media2Type;
+        let loopEnabled = true; // Loop is enabled by default
 
         // Add click event listeners to file name displays for toggling expansion
         fileName1.addEventListener('click', () => {
@@ -224,6 +289,31 @@
             if (!event.target.classList.contains('file-name-display')) {
                 fileName1.classList.remove('expanded');
                 fileName2.classList.remove('expanded');
+            }
+        });
+
+        // Handle loop toggle
+        loopToggle.addEventListener('change', () => {
+            loopEnabled = loopToggle.checked;
+            
+            // Update loop property of videos if they exist
+            if (media1 && media1Type === 'video') {
+                media1.loop = loopEnabled;
+            }
+            if (media2 && media2Type === 'video') {
+                media2.loop = loopEnabled;
+            }
+        });
+        
+        // Allow clicking the text to toggle as well
+        loopToggleContainer.addEventListener('click', (event) => {
+            // Only toggle if the click wasn't directly on the checkbox (as that has its own handler)
+            if (event.target !== loopToggle) {
+                loopToggle.checked = !loopToggle.checked;
+                
+                // Trigger the change event manually
+                const changeEvent = new Event('change');
+                loopToggle.dispatchEvent(changeEvent);
             }
         });
 
@@ -257,6 +347,35 @@
                 togglePlayPause();
             }
         });
+
+// Add this code right after the spacebar event listener in the script
+
+// Handle arrow keys for skipping forward/backward
+document.addEventListener('keydown', (event) => {
+    // Skip forward 5 seconds with right arrow key
+    if (event.key === 'ArrowRight' || event.code === 'ArrowRight') {
+        event.preventDefault();
+        
+        if (media1 && media1Type === 'video') {
+            media1.currentTime = Math.min(media1.currentTime + 5, media1.duration);
+        }
+        if (media2 && media2Type === 'video') {
+            media2.currentTime = Math.min(media2.currentTime + 5, media2.duration);
+        }
+    }
+    
+    // Skip backward 5 seconds with left arrow key
+    if (event.key === 'ArrowLeft' || event.code === 'ArrowLeft') {
+        event.preventDefault();
+        
+        if (media1 && media1Type === 'video') {
+            media1.currentTime = Math.max(media1.currentTime - 5, 0);
+        }
+        if (media2 && media2Type === 'video') {
+            media2.currentTime = Math.max(media2.currentTime - 5, 0);
+        }
+    }
+});
 
         // Handle the reset button
         resetBtn.addEventListener('click', () => {
@@ -349,7 +468,7 @@
             } else if (file.type.startsWith('video/')) {
                 const video = document.createElement('video');
                 video.controls = false; // We'll use our custom controls
-                video.loop = false;
+                video.loop = loopEnabled; // Apply current loop setting
                 video.muted = index === 1; // Mute the second video to avoid audio overlap
                 
                 const reader = new FileReader();
@@ -401,17 +520,21 @@
         // Synchronize video playback
         function syncVideos() {
             if (media1 && media1Type === 'video' && media2 && media2Type === 'video') {
-                // If one video ends, pause both and reset the play button
+                // If one video ends and looping is disabled, pause both and reset the play button
                 media1.addEventListener('ended', () => {
-                    media2.pause();
-                    isPlaying = false;
-                    playPauseBtn.textContent = 'Play';
+                    if (!loopEnabled) {
+                        media2.pause();
+                        isPlaying = false;
+                        playPauseBtn.textContent = 'Play';
+                    }
                 });
                 
                 media2.addEventListener('ended', () => {
-                    media1.pause();
-                    isPlaying = false;
-                    playPauseBtn.textContent = 'Play';
+                    if (!loopEnabled) {
+                        media1.pause();
+                        isPlaying = false;
+                        playPauseBtn.textContent = 'Play';
+                    }
                 });
             }
         }
